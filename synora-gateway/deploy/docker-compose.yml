@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: synora-gateway
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://synora:synora123@db:5432/synora?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - CLICKHOUSE_URL=clickhouse://db-logs:9000/synora
+    depends_on:
+      - db
+      - redis
+      - db-logs
+    networks:
+      - synora-network
+
+  db:
+    image: postgres:16-alpine
+    container_name: synora-db
+    restart: always
+    environment:
+      POSTGRES_USER: synora
+      POSTGRES_PASSWORD: synora123
+      POSTGRES_DB: synora
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - synora-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: synora-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - synora-network
+
+  db-logs:
+    image: clickhouse/clickhouse-server:latest
+    container_name: synora-clickhouse
+    restart: always
+    environment:
+      CLICKHOUSE_DB: synora
+      CLICKHOUSE_USER: synora
+      CLICKHOUSE_PASSWORD: synora123
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - synora-network
+
+networks:
+  synora-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  clickhouse_data:
+  clickhouse_logs:

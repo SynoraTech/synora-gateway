@@ -1,0 +1,29 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache-dependency-path: synora-gateway/go.sum
+
+    - name: Build
+      run: cd synora-gateway && go build -v ./...
+
+    - name: Test
+      run: cd synora-gateway && go test -v ./...
+
+    - name: Build Docker Image
+      run: |
+        docker build -t synora-gateway:latest -f synora-gateway/deploy/Dockerfile synora-gateway

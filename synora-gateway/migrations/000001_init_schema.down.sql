@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS wallet_transactions;
+DROP TABLE IF EXISTS wallets;
+DROP TABLE IF EXISTS pricing;
+DROP TABLE IF EXISTS channels;
+DROP TABLE IF EXISTS api_keys;
+DROP TABLE IF EXISTS users;
