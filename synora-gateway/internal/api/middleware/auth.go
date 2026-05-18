@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/synora/synora-gateway/internal/billing"
+	"github.com/synora/synora-gateway/internal/risk"
 	"github.com/synora/synora-gateway/internal/storage/pg"
 	"github.com/synora/synora-gateway/internal/storage/redis"
 )
@@ -19,8 +20,8 @@ const (
 	BearerPrefix = "Bearer "
 )
 
-// AuthMiddleware handles API Key authentication and initial balance check
-func AuthMiddleware() gin.HandlerFunc {
+// AuthMiddleware handles API Key authentication, balance pre-check, and risk control
+func AuthMiddleware(riskEngine *risk.RiskEngine) gin.HandlerFunc {
 	walletSvc := billing.NewWalletService()
 
 	return func(c *gin.Context) {
@@ -36,10 +37,7 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 1. Hash the key
 		keyHash := hashAPIKey(apiKey)
-
-		// 2. Check Redis Cache for Auth
 		ctx := c.Request.Context()
 		rdb := redis.GetRedis()
 		authCacheKey := fmt.Sprintf("auth:key:%s", keyHash)
@@ -47,29 +45,47 @@ func AuthMiddleware() gin.HandlerFunc {
 		userIDStr, err := rdb.Get(ctx, authCacheKey).Result()
 		var userID int
 		if err == nil && userIDStr != "" {
-			userID, _ = strconv.Atoi(userIDStr)
+			parts := strings.Split(userIDStr, ":")
+			userID, _ = strconv.Atoi(parts[0])
+			if len(parts) > 1 {
+				c.Set("user_tier", parts[1])
+			}
 		} else {
-			// 3. Database lookup
 			db := pg.GetDB()
 			var status string
-			query := "SELECT user_id, status FROM api_keys WHERE key_hash = $1"
-			err = db.QueryRow(ctx, query, keyHash).Scan(&userID, &status)
-			
+			var tier string
+			query := `
+				SELECT k.user_id, k.status, u.tier 
+				FROM api_keys k 
+				JOIN users u ON k.user_id = u.id 
+				WHERE k.key_hash = $1
+			`
+			err = db.QueryRow(ctx, query, keyHash).Scan(&userID, &status, &tier)
 			if err != nil {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 				return
 			}
-
 			if status != "active" {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "API key is " + status})
 				return
 			}
-
-			// Update Auth Cache
-			rdb.Set(ctx, authCacheKey, fmt.Sprintf("%d", userID), 300*1e9)
+			rdb.Set(ctx, authCacheKey, fmt.Sprintf("%d:%s", userID, tier), 300*1e9)
+			c.Set("user_tier", tier)
 		}
 
-		// 4. Pre-check Balance (must be > 0)
+		// 1. Risk Evaluation (declarative rules)
+		// For MVP, we mock some metrics; in production these come from ClickHouse/Redis
+		metrics := map[string]float64{
+			"daily_spend_cny": 50.0, // Mocked
+		}
+		if riskEngine != nil {
+			if triggered, msg := riskEngine.EvaluateRules(ctx, userID, metrics); triggered {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Risk control triggered: " + msg})
+				return
+			}
+		}
+
+		// 2. Pre-check Balance
 		balance, err := walletSvc.CheckBalance(ctx, userID)
 		if err != nil {
 			if err == billing.ErrWalletNotFound {
@@ -79,7 +95,6 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Failed to check balance"})
 			return
 		}
-
 		if balance <= 0 {
 			c.AbortWithStatusJSON(http.StatusPaymentRequired, gin.H{"error": "Insufficient balance. Please recharge."})
 			return

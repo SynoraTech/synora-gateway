@@ -1,0 +1,12 @@
+rules:
+  - id: api_key_daily_limit
+    scope: api_key
+    metric: daily_spend_cny
+    threshold: 100.0        # Default 100 CNY/day
+    action: pause_key
+
+  - id: anomaly_burst
+    scope: api_key
+    metric: spend_per_minute
+    threshold: 20.0         # 20 CNY per minute spike
+    action: rate_limit

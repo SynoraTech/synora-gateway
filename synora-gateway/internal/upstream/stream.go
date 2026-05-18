@@ -2,11 +2,11 @@ package upstream
 
 import (
 	"bufio"
-	"bytes"
 	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/synora/synora-gateway/internal/adapter"
 )
 
 // StreamForwarder handles forwarding SSE stream from upstream to client
@@ -17,7 +17,7 @@ func NewStreamForwarder() *StreamForwarder {
 }
 
 // Forward streams the upstream response body to the Gin context
-func (f *StreamForwarder) Forward(c *gin.Context, resp *http.Response) (int, error) {
+func (f *StreamForwarder) Forward(c *gin.Context, resp *http.Response, adp adapter.ProviderAdapter) (int, error) {
 	// Set outgoing headers for SSE
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
@@ -34,15 +34,21 @@ func (f *StreamForwarder) Forward(c *gin.Context, resp *http.Response) (int, err
 			if err == io.EOF {
 				return false
 			}
-			// Log error if needed
 			return false
 		}
 
-		totalBytes += len(line)
-		w.Write(line)
+		// Convert chunk using adapter
+		converted, err := adp.ConvertStreamChunk(line)
+		if err != nil {
+			// If conversion fails, we might still want to try sending the raw line or stop
+			return false
+		}
 
-		// Check if it's the end of OpenAI stream
-		if bytes.HasPrefix(line, []byte("data: [DONE]")) {
+		totalBytes += len(converted)
+		w.Write(converted)
+
+		// Check if it's the end of stream using adapter
+		if adp.IsStreamEnd(line) {
 			return false
 		}
 

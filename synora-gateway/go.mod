@@ -4,7 +4,6 @@ go 1.26.3
 
 require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.46.0
-	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/alicebob/miniredis/v2 v2.38.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/synora/synora-gateway/internal/adapter"
+	"github.com/synora/synora-gateway/internal/adapter/factory"
 	"github.com/synora/synora-gateway/internal/router"
 )
 
@@ -34,7 +35,7 @@ type RequestContext struct {
 }
 
 // Do executes the request with failover logic
-func (d *Dispatcher) Do(ctx context.Context, rc *RequestContext, hm *router.HealthManager) (*http.Response, *router.Channel, error) {
+func (d *Dispatcher) Do(ctx context.Context, rc *RequestContext, hm *router.HealthManager) (*http.Response, *router.Channel, adapter.ProviderAdapter, error) {
 	var lastErr error
 	triedChannels := make(map[uint32]bool)
 
@@ -46,18 +47,25 @@ func (d *Dispatcher) Do(ctx context.Context, rc *RequestContext, hm *router.Heal
 		}
 		triedChannels[ch.ID] = true
 
-		// 2. Execute request to this channel
-		resp, latency, err := d.executeRequest(ctx, rc.UnifiedRequest, ch)
+		// 2. Get adapter for this provider
+		adp, err := factory.GetAdapter(ch.Provider)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		// 3. Execute request to this channel
+		resp, latency, err := d.executeRequest(ctx, rc.UnifiedRequest, ch, adp)
 		
-		// 3. Update health based on outcome
+		// 4. Update health based on outcome
 		isSuccess := err == nil && resp.StatusCode < 500 && resp.StatusCode != 429
 		hm.UpdateScore(ch.ID, isSuccess, latency)
 
 		if isSuccess {
-			return resp, ch, nil
+			return resp, ch, adp, nil
 		}
 
-		// 4. Handle Failover
+		// 5. Handle Failover
 		if i < rc.MaxRetries && shouldFailover(err, resp) {
 			if resp != nil {
 				resp.Body.Close()
@@ -69,26 +77,36 @@ func (d *Dispatcher) Do(ctx context.Context, rc *RequestContext, hm *router.Heal
 			continue
 		}
 
-		return resp, ch, err
+		return resp, ch, adp, err
 	}
 
-	return nil, nil, fmt.Errorf("all channels failed, last error: %v", lastErr)
+	return nil, nil, nil, fmt.Errorf("all channels failed, last error: %v", lastErr)
 }
 
-func (d *Dispatcher) executeRequest(ctx context.Context, req *adapter.UnifiedRequest, ch *router.Channel) (*http.Response, time.Duration, error) {
+func (d *Dispatcher) executeRequest(ctx context.Context, req *adapter.UnifiedRequest, ch *router.Channel, adp adapter.ProviderAdapter) (*http.Response, time.Duration, error) {
 	start := time.Now()
 	
-	// Convert UnifiedRequest to Provider-specific body (MVP: assume OpenAI)
-	body, _ := json.Marshal(req) // Simplified for MVP
+	// Convert UnifiedRequest to Provider-specific body
+	providerReq, err := adp.ToRequest(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	body, _ := json.Marshal(providerReq)
 	
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", ch.Endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Set headers (Credentials)
+	// Set headers
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+ch.CredentialRef) // In real, decrypt this
+	// For Anthropic, we need x-api-key and anthropic-version
+	if ch.Provider == "anthropic" {
+		httpReq.Header.Set("x-api-key", ch.CredentialRef)
+		httpReq.Header.Set("anthropic-version", "2023-06-01")
+	} else {
+		httpReq.Header.Set("Authorization", "Bearer "+ch.CredentialRef)
+	}
 
 	resp, err := d.httpClient.Do(httpReq)
 	latency := time.Since(start)

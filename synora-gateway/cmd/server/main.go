@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"github.com/synora/synora-gateway/internal/api"
 	"github.com/synora/synora-gateway/internal/api/middleware"
 	"github.com/synora/synora-gateway/internal/audit"
+	"github.com/synora/synora-gateway/internal/billing"
+	"github.com/synora/synora-gateway/internal/risk"
 	"github.com/synora/synora-gateway/internal/router"
 	"github.com/synora/synora-gateway/internal/storage/clickhouse"
 	"github.com/synora/synora-gateway/internal/storage/pg"
@@ -17,7 +20,7 @@ import (
 )
 
 func main() {
-	// ... (Load environment and set Gin mode)
+	// ... (Existing init logic)
 	mode := os.Getenv("GIN_MODE")
 	if mode == "" {
 		mode = gin.DebugMode
@@ -51,35 +54,41 @@ func main() {
 		log.Printf("Warning: Failed to initialize ClickHouse: %v", err)
 	}
 
+	// Risk Engine Init
+	riskEngine, err := risk.NewRiskEngine("deploy/risk_rules.yaml", []string{"sensitive_word_1", "illegal_content_token"})
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Risk Engine: %v", err)
+	}
+
 	hm := router.NewHealthManager()
+	cs := router.NewChannelService(hm)
+	if err := cs.LoadAllChannels(context.Background()); err != nil {
+		log.Printf("Warning: Failed to load channels: %v", err)
+	}
+
 	logger := audit.NewLogDispatcher(1000)
-	chatHandler := api.NewChatHandler(hm, logger)
+	chatHandler := api.NewChatHandler(hm, cs, logger)
 
 	// 3. Setup Router
 	r := gin.Default()
 
-	// ... (Metrics and Health check)
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
-
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"version": "v1.0.0-mvp",
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "v1.0.0-p0"})
 	})
 
-	// V1 API group with Authentication
+	// V1 API group with Authentication and Risk Control
 	v1 := r.Group("/v1")
-	v1.Use(middleware.AuthMiddleware())
+	v1.Use(middleware.AuthMiddleware(riskEngine))
 	{
 		v1.POST("/chat/completions", chatHandler.ChatCompletions)
 		
+		// Anthropic native messages endpoint
+		v1.POST("/messages", chatHandler.AnthropicMessages)
+
 		v1.GET("/ping", func(c *gin.Context) {
 			userID, _ := c.Get("user_id")
-			c.JSON(http.StatusOK, gin.H{
-				"message": "pong",
-				"user_id": userID,
-			})
+			c.JSON(http.StatusOK, gin.H{"message": "pong", "user_id": userID})
 		})
 	}
 

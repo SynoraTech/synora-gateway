@@ -15,13 +15,34 @@ import (
 var (
 	ErrInsufficientBalance = errors.New("insufficient balance")
 	ErrWalletNotFound      = errors.New("wallet not found")
+	ErrPriceNotFound       = errors.New("pricing not found for model")
 )
 
-// WalletService handles balance checks and deductions
+type ModelPrice struct {
+	InputPrice1k  float64
+	OutputPrice1k float64
+}
+
+// WalletService handles balance checks, deductions and pricing
 type WalletService struct{}
 
 func NewWalletService() *WalletService {
 	return &WalletService{}
+}
+
+// GetModelPrice retrieves pricing for a specific model and provider
+func (s *WalletService) GetModelPrice(ctx context.Context, model, provider string) (*ModelPrice, error) {
+	db := pg.GetDB()
+	var input, output float64
+	query := "SELECT input_price_per_1k, output_price_per_1k FROM pricing WHERE model_name = $1 AND provider = $2"
+	err := db.QueryRow(ctx, query, model, provider).Scan(&input, &output)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrPriceNotFound
+		}
+		return nil, err
+	}
+	return &ModelPrice{InputPrice1k: input, OutputPrice1k: output}, nil
 }
 
 // CheckBalance checks if the user has enough balance in Redis cache first

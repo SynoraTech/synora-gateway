@@ -31,6 +31,10 @@ type Channel struct {
 	mu                  sync.RWMutex
 	lastFailureTime     time.Time
 	failureCount        int
+	
+	// Metrics for sliding window (last 10 requests)
+	successes []bool
+	latencies []time.Duration
 }
 
 // ModelConfig maps a logical model name to available channels
@@ -50,10 +54,6 @@ func NewHealthManager() *HealthManager {
 
 // UpdateScore updates channel health based on request outcome
 func (m *HealthManager) UpdateScore(channelID uint32, success bool, latency time.Duration) {
-	// Implementation of the health algorithm from tech plan §3.3.2
-	// HealthScore = 100 - (Failure Rate * 40) - (Latency Penalty * 20) ...
-	
-	// For MVP, start with a simple success/failure counting and circuit breaking
 	val, ok := m.channels.Load(channelID)
 	if !ok {
 		return
@@ -63,22 +63,68 @@ func (m *HealthManager) UpdateScore(channelID uint32, success bool, latency time
 	ch.mu.Lock()
 	defer ch.mu.Unlock()
 
-	if success {
-		ch.failureCount = 0
-		ch.HealthScore = 100
-		ch.State = StateActive
-	} else {
+	// Update sliding window
+	ch.successes = append(ch.successes, success)
+	ch.latencies = append(ch.latencies, latency)
+	if len(ch.successes) > 10 {
+		ch.successes = ch.successes[1:]
+		ch.latencies = ch.latencies[1:]
+	}
+
+	// Calculate Failure Rate
+	failCount := 0
+	for _, s := range ch.successes {
+		if !s {
+			failCount++
+		}
+	}
+	failRate := float64(failCount) / float64(len(ch.successes))
+
+	// Calculate Max Latency (simplified for 10 samples)
+	var maxLatency time.Duration
+	for _, l := range ch.latencies {
+		if l > maxLatency {
+			maxLatency = l
+		}
+	}
+
+	// HealthScore calculation (Tech Plan §3.3.2)
+	score := 100.0
+	score -= failRate * 40
+	
+	if maxLatency > 10*time.Second {
+		score -= 20
+	} else if maxLatency > 5*time.Second {
+		score -= 10
+	}
+
+	// Recovery logic
+	if success && time.Since(ch.lastFailureTime) > 5*time.Minute {
+		score += 10
+	}
+
+	if score > 100 {
+		score = 100
+	} else if score < 0 {
+		score = 0
+	}
+
+	ch.HealthScore = int(score)
+
+	// State machine transition
+	if !success {
 		ch.failureCount++
 		ch.lastFailureTime = time.Now()
-		
-		// If 3 consecutive failures, trip the circuit
-		if ch.failureCount >= 3 {
-			ch.HealthScore = 0
-			ch.State = StateCircuitOpen
-		} else {
-			ch.HealthScore -= 30
-			ch.State = StateDegraded
-		}
+	} else {
+		ch.failureCount = 0
+	}
+
+	if ch.HealthScore < 60 || ch.failureCount >= 3 {
+		ch.State = StateCircuitOpen
+	} else if ch.HealthScore < 80 {
+		ch.State = StateDegraded
+	} else {
+		ch.State = StateActive
 	}
 }
 

@@ -17,12 +17,28 @@ type UnifiedRequest struct {
 	Temperature float64   `json:"temperature,omitempty"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
 	TopP        float64   `json:"top_p,omitempty"`
+	Stop        []string  `json:"stop,omitempty"`
 	// Additional common fields...
 
 	// Internal metadata
 	RequestID string    `json:"-"`
 	UserID    int       `json:"-"`
 	StartTime time.Time `json:"-"`
+}
+
+// ProviderAdapter defines the interface for protocol-specific conversions
+type ProviderAdapter interface {
+	// Request conversion
+	ToRequest(req *UnifiedRequest) (interface{}, error)
+	
+	// Response conversion
+	FromResponse(body []byte) (*UnifiedResponse, error)
+	
+	// Stream chunk conversion (逐 chunk 转换)
+	ConvertStreamChunk(line []byte) ([]byte, error)
+	
+	// Get completion signal for SSE
+	IsStreamEnd(line []byte) bool
 }
 
 // Usage stats for tokens
