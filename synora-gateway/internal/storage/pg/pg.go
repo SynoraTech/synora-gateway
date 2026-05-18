@@ -58,6 +58,11 @@ func SetDBForTest(p *pgxpool.Pool) {
 	pool = p
 }
 
+// ResetOnceForTest resets the sync.Once to allow re-initialization (only for tests)
+func ResetOnceForTest() {
+	once = sync.Once{}
+}
+
 // CloseDB closes the connection pool
 func CloseDB() {
 	if pool != nil {

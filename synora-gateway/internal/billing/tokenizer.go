@@ -2,6 +2,7 @@ package billing
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/pkoukk/tiktoken-go"
 	"github.com/synora/synora-gateway/internal/adapter"
@@ -9,7 +10,7 @@ import (
 
 // Tokenizer handles token counting for different models
 type Tokenizer struct {
-	// Cache for encodings if needed
+	mu sync.Mutex
 }
 
 func NewTokenizer() *Tokenizer {
@@ -27,7 +28,10 @@ func (t *Tokenizer) CountTokens(text string, model string) (int, error) {
 		encoding = "o200k_base"
 	}
 
+	t.mu.Lock()
 	tke, err := tiktoken.GetEncoding(encoding)
+	t.mu.Unlock()
+	
 	if err != nil {
 		return 0, fmt.Errorf("failed to get encoding: %v", err)
 	}

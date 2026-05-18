@@ -51,6 +51,11 @@ func SetRedisForTest(c *redis.Client) {
 	client = c
 }
 
+// ResetOnceForTest resets the sync.Once to allow re-initialization (only for tests)
+func ResetOnceForTest() {
+	once = sync.Once{}
+}
+
 // CloseRedis closes the Redis client
 func CloseRedis() {
 	if client != nil {

@@ -6,13 +6,19 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/synora/synora-gateway/internal/storage/redis"
+	"github.com/redis/go-redis/v9"
+	storageRedis "github.com/synora/synora-gateway/internal/storage/redis"
 )
 
 func TestWalletService_RedisCache(t *testing.T) {
 	mr, _ := miniredis.Run()
 	defer mr.Close()
-	_, _ = redis.InitRedis("redis://" + mr.Addr() + "/0")
+	
+	client := redis.NewClient(&redis.Options{
+		Addr: mr.Addr(),
+	})
+	storageRedis.SetRedisForTest(client)
+	defer storageRedis.SetRedisForTest(nil)
 
 	svc := NewWalletService()
 	userID := 123
