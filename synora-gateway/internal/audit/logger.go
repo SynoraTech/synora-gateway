@@ -58,9 +58,13 @@ func (d *LogDispatcher) Log(entry *CallLog) {
 }
 
 func (d *LogDispatcher) startWorker() {
-	conn := clickhouse.GetConn()
-	
 	for entry := range d.logChan {
+		conn := clickhouse.GetConn()
+		if conn == nil {
+			log.Println("Audit Log Worker: ClickHouse connection not initialized, dropping log")
+			continue
+		}
+		
 		ctx := context.Background()
 		err := conn.Exec(ctx, `
 			INSERT INTO call_logs (

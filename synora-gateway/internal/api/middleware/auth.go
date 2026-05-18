@@ -74,11 +74,11 @@ func AuthMiddleware(riskEngine *risk.RiskEngine) gin.HandlerFunc {
 		}
 
 		// 1. Risk Evaluation (declarative rules)
-		// For MVP, we mock some metrics; in production these come from ClickHouse/Redis
-		metrics := map[string]float64{
-			"daily_spend_cny": 50.0, // Mocked
-		}
 		if riskEngine != nil {
+			metrics, err := riskEngine.GetMetrics(ctx, userID)
+			if err != nil {
+				// Log error but continue for MVP
+			}
 			if triggered, msg := riskEngine.EvaluateRules(ctx, userID, metrics); triggered {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Risk control triggered: " + msg})
 				return

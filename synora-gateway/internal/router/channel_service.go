@@ -23,13 +23,57 @@ func NewChannelService(hm *HealthManager) *ChannelService {
 	}
 }
 
+// ModelStatus represents the health status of a logical model
+type ModelStatus struct {
+	ModelName      string `json:"model_name"`
+	Status         string `json:"status"` // green, yellow, red
+	ActiveChannels int    `json:"active_channels"`
+}
+
+// GetAllModelsStatus returns the aggregated health status of all models
+func (s *ChannelService) GetAllModelsStatus() []ModelStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var statuses []ModelStatus
+	for modelName, channels := range s.modelChannels {
+		activeCount := 0
+		totalScore := 0
+		for _, ch := range channels {
+			ch.mu.RLock()
+			if ch.State == StateActive || ch.State == StateDegraded {
+				activeCount++
+				totalScore += ch.HealthScore
+			}
+			ch.mu.RUnlock()
+		}
+
+		status := "red"
+		if activeCount > 0 {
+			avgScore := totalScore / len(channels) // Can be improved
+			if avgScore >= 80 {
+				status = "green"
+			} else {
+				status = "yellow"
+			}
+		}
+
+		statuses = append(statuses, ModelStatus{
+			ModelName:      modelName,
+			Status:         status,
+			ActiveChannels: activeCount,
+		})
+	}
+	return statuses
+}
+
 // LoadAllChannels loads channels from DB and updates the HealthManager and local cache
 func (s *ChannelService) LoadAllChannels(ctx context.Context) error {
 	db := pg.GetDB()
 
 	// 1. Load all channels
 	rows, err := db.Query(ctx, `
-		SELECT id, name, provider, endpoint, credential_ref, region, weight, priority, customer_tier_allowed, health_score, state 
+		SELECT id, name, provider, endpoint, credential_ref, region, weight, priority, customer_tier_allowed, health_score, state, proxy_url 
 		FROM channels
 	`)
 	if err != nil {
@@ -43,7 +87,7 @@ func (s *ChannelService) LoadAllChannels(ctx context.Context) error {
 		err := rows.Scan(
 			&ch.ID, &ch.Name, &ch.Provider, &ch.Endpoint, &ch.CredentialRef, 
 			&ch.Region, &ch.Weight, &ch.Priority, &ch.CustomerTierAllowed, 
-			&ch.HealthScore, &ch.State,
+			&ch.HealthScore, &ch.State, &ch.ProxyURL,
 		)
 		if err != nil {
 			return fmt.Errorf("failed to scan channel: %v", err)

@@ -46,6 +46,11 @@ func GetRedis() *redis.Client {
 	return client
 }
 
+// SetRedisForTest sets the redis client for testing
+func SetRedisForTest(c *redis.Client) {
+	client = c
+}
+
 // CloseRedis closes the Redis client
 func CloseRedis() {
 	if client != nil {

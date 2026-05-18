@@ -11,7 +11,6 @@ import (
 	"github.com/synora/synora-gateway/internal/api"
 	"github.com/synora/synora-gateway/internal/api/middleware"
 	"github.com/synora/synora-gateway/internal/audit"
-	"github.com/synora/synora-gateway/internal/billing"
 	"github.com/synora/synora-gateway/internal/risk"
 	"github.com/synora/synora-gateway/internal/router"
 	"github.com/synora/synora-gateway/internal/storage/clickhouse"
@@ -58,6 +57,8 @@ func main() {
 	riskEngine, err := risk.NewRiskEngine("deploy/risk_rules.yaml", []string{"sensitive_word_1", "illegal_content_token"})
 	if err != nil {
 		log.Printf("Warning: Failed to initialize Risk Engine: %v", err)
+	} else {
+		go riskEngine.StartRiskEvaluationLoop(context.Background())
 	}
 
 	hm := router.NewHealthManager()
@@ -67,7 +68,9 @@ func main() {
 	}
 
 	logger := audit.NewLogDispatcher(1000)
-	chatHandler := api.NewChatHandler(hm, cs, logger)
+	chatHandler := api.NewChatHandler(hm, cs, riskEngine, logger)
+	statusHandler := api.NewStatusHandler(cs)
+	billingHandler := api.NewStripeHandler()
 
 	// 3. Setup Router
 	r := gin.Default()
@@ -77,6 +80,15 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "version": "v1.0.0-p0"})
 	})
 
+	// Public Status API (No auth required)
+	public := r.Group("/public")
+	{
+		public.GET("/status", statusHandler.GetStatus)
+	}
+
+	// Billing Webhooks (Stripe)
+	r.POST("/v1/billing/stripe/webhook", billingHandler.Webhook)
+
 	// V1 API group with Authentication and Risk Control
 	v1 := r.Group("/v1")
 	v1.Use(middleware.AuthMiddleware(riskEngine))
@@ -85,6 +97,10 @@ func main() {
 		
 		// Anthropic native messages endpoint
 		v1.POST("/messages", chatHandler.AnthropicMessages)
+
+		// Gemini native generateContent endpoint
+		// Supports /v1beta/models/{model}:{action}
+		v1.POST("/models/:model\\::action", chatHandler.GeminiGenerateContent)
 
 		v1.GET("/ping", func(c *gin.Context) {
 			userID, _ := c.Get("user_id")

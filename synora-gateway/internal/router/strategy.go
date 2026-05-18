@@ -27,6 +27,7 @@ type Channel struct {
 	CustomerTierAllowed string       `json:"customer_tier_allowed"`
 	HealthScore         int          `json:"health_score"`
 	State               ChannelState `json:"state"`
+	ProxyURL            *string      `json:"proxy_url,omitempty"`
 	
 	mu                  sync.RWMutex
 	lastFailureTime     time.Time
@@ -50,6 +51,11 @@ type HealthManager struct {
 
 func NewHealthManager() *HealthManager {
 	return &HealthManager{}
+}
+
+// AddChannel adds a channel to the health manager
+func (m *HealthManager) AddChannel(ch *Channel) {
+	m.channels.Store(ch.ID, ch)
 }
 
 // UpdateScore updates channel health based on request outcome

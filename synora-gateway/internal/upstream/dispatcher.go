@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"net/url"
+	"sync"
 	"time"
 
 	"github.com/synora/synora-gateway/internal/adapter"
@@ -15,15 +18,45 @@ import (
 
 // Dispatcher handles the execution of requests to upstream providers
 type Dispatcher struct {
-	httpClient *http.Client
+	defaultClient *http.Client
+	clients       sync.Map // map[string]*http.Client
 }
 
 func NewDispatcher() *Dispatcher {
 	return &Dispatcher{
-		httpClient: &http.Client{
+		defaultClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
 	}
+}
+
+func (d *Dispatcher) getClient(proxyURL *string) *http.Client {
+	if proxyURL == nil || *proxyURL == "" {
+		return d.defaultClient
+	}
+	
+	pURL := *proxyURL
+	if client, ok := d.clients.Load(pURL); ok {
+		return client.(*http.Client)
+	}
+
+	// Create new client with proxy
+	u, err := url.Parse(pURL)
+	if err != nil {
+		log.Printf("Warning: Invalid proxy URL %s: %v", pURL, err)
+		return d.defaultClient
+	}
+
+	transport := &http.Transport{
+		Proxy: http.ProxyURL(u),
+	}
+	newClient := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: transport,
+	}
+
+	d.clients.Store(pURL, newClient)
+	return newClient
 }
 
 // RequestContext holds state for a single request attempt
@@ -108,7 +141,8 @@ func (d *Dispatcher) executeRequest(ctx context.Context, req *adapter.UnifiedReq
 		httpReq.Header.Set("Authorization", "Bearer "+ch.CredentialRef)
 	}
 
-	resp, err := d.httpClient.Do(httpReq)
+	client := d.getClient(ch.ProxyURL)
+	resp, err := client.Do(httpReq)
 	latency := time.Since(start)
 
 	return resp, latency, err

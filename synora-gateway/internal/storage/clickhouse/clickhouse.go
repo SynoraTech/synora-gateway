@@ -51,8 +51,10 @@ func InitClickHouse(addr, db, user, pass string) (driver.Conn, error) {
 
 // GetConn returns the initialized ClickHouse connection
 func GetConn() driver.Conn {
-	if conn == nil {
-		log.Fatal("ClickHouse connection has not been initialized.")
-	}
 	return conn
+}
+
+// SetConnForTest sets the ClickHouse connection for testing
+func SetConnForTest(c driver.Conn) {
+	conn = c
 }

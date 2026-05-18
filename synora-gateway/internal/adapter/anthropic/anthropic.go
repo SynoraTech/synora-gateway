@@ -3,7 +3,6 @@ package anthropic
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 

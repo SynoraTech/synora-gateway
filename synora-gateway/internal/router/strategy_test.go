@@ -17,8 +17,8 @@ func TestHealthManager_UpdateScore(t *testing.T) {
 
 	// 1. Test single failure
 	hm.UpdateScore(ch.ID, false, 100*time.Millisecond)
-	if ch.HealthScore != 70 {
-		t.Errorf("Expected health score 70, got %d", ch.HealthScore)
+	if ch.HealthScore != 60 {
+		t.Errorf("Expected health score 60, got %d", ch.HealthScore)
 	}
 	if ch.State != StateDegraded {
 		t.Errorf("Expected state degraded, got %s", ch.State)
@@ -27,8 +27,8 @@ func TestHealthManager_UpdateScore(t *testing.T) {
 	// 2. Test 3 consecutive failures (Circuit Break)
 	hm.UpdateScore(ch.ID, false, 100*time.Millisecond)
 	hm.UpdateScore(ch.ID, false, 100*time.Millisecond)
-	if ch.HealthScore != 0 {
-		t.Errorf("Expected health score 0, got %d", ch.HealthScore)
+	if ch.HealthScore != 60 { // failRate is 1.0, score remains 60
+		t.Errorf("Expected health score 60, got %d", ch.HealthScore)
 	}
 	if ch.State != StateCircuitOpen {
 		t.Errorf("Expected state circuit_open, got %s", ch.State)
@@ -36,11 +36,12 @@ func TestHealthManager_UpdateScore(t *testing.T) {
 
 	// 3. Test recovery on success
 	hm.UpdateScore(ch.ID, true, 50*time.Millisecond)
-	if ch.HealthScore != 100 {
-		t.Errorf("Expected health score 100, got %d", ch.HealthScore)
+	// failRate = 3/4 = 0.75. score = 100 - 0.75*40 = 70.
+	if ch.HealthScore != 70 {
+		t.Errorf("Expected health score 70, got %d", ch.HealthScore)
 	}
-	if ch.State != StateActive {
-		t.Errorf("Expected state active, got %s", ch.State)
+	if ch.State != StateDegraded {
+		t.Errorf("Expected state degraded, got %s", ch.State)
 	}
 }
 

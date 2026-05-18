@@ -18,11 +18,26 @@ jobs:
         go-version: '1.26'
         cache-dependency-path: synora-gateway/go.sum
 
+    - name: Verify modules
+      run: cd synora-gateway && go mod verify
+
+    - name: Lint
+      uses: golangci/golangci-lint-action@v4
+      with:
+        version: latest
+        working-directory: synora-gateway
+
     - name: Build
       run: cd synora-gateway && go build -v ./...
 
     - name: Test
-      run: cd synora-gateway && go test -v ./...
+      run: cd synora-gateway && go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./synora-gateway/coverage.txt
+        fail_ci_if_error: false
 
     - name: Log in to Docker Hub
       if: github.event_name != 'pull_request'

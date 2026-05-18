@@ -53,6 +53,11 @@ func GetDB() *pgxpool.Pool {
 	return pool
 }
 
+// SetDBForTest sets the DB pool for testing
+func SetDBForTest(p *pgxpool.Pool) {
+	pool = p
+}
+
 // CloseDB closes the connection pool
 func CloseDB() {
 	if pool != nil {
