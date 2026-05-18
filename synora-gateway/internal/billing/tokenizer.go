@@ -42,7 +42,10 @@ func (t *Tokenizer) CountMessagesTokens(messages []interface{}, model string) (i
 	total := 0
 	for _, m := range messages {
 		if msg, ok := m.(map[string]string); ok {
-			c, _ := t.CountTokens(msg["content"], model)
+			c, err := t.CountTokens(msg["content"], model)
+			if err != nil {
+				return 0, err
+			}
 			total += c + 4 // Add constant overhead per message
 		}
 	}
@@ -53,7 +56,10 @@ func (t *Tokenizer) CountMessagesTokens(messages []interface{}, model string) (i
 func (t *Tokenizer) CountUnifiedMessagesTokens(messages []adapter.Message, model string) (int, error) {
 	total := 0
 	for _, m := range messages {
-		c, _ := t.CountTokens(m.Content, model)
+		c, err := t.CountTokens(m.Content, model)
+		if err != nil {
+			return 0, err
+		}
 		total += c + 4 // Add constant overhead per message
 	}
 	return total + 3, nil

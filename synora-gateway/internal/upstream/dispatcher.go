@@ -55,8 +55,8 @@ func (d *Dispatcher) getClient(proxyURL *string) *http.Client {
 		Transport: transport,
 	}
 
-	d.clients.Store(pURL, newClient)
-	return newClient
+	actual, _ := d.clients.LoadOrStore(pURL, newClient)
+	return actual.(*http.Client)
 }
 
 // RequestContext holds state for a single request attempt

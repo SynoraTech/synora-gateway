@@ -137,13 +137,12 @@ func (m *HealthManager) UpdateScore(channelID uint32, success bool, latency time
 // GetBestChannel selects the optimal channel for a request
 func (m *HealthManager) GetBestChannel(channels []*Channel, userTier string) *Channel {
 	var best *Channel
+	var bestPriority int
+	var bestHealth int
+	var bestTierMatch bool
 
 	for _, ch := range channels {
 		ch.mu.RLock()
-		// 1. Filter by Tier (Flagship isolation)
-		// Logic:
-		// - If channel is for flagship but user is not, skip.
-		// - If channel is for standard but user is flagship, should we prioritize flagship channels? Yes.
 		
 		isAllowed := false
 		if ch.CustomerTierAllowed == "all" {
@@ -152,33 +151,38 @@ func (m *HealthManager) GetBestChannel(channels []*Channel, userTier string) *Ch
 			isAllowed = true
 		}
 
-		if !isAllowed {
+		if !isAllowed || ch.State == StateCircuitOpen || ch.State == StateDisabled {
 			ch.mu.RUnlock()
 			continue
 		}
 
-		// 2. Filter by State
-		if ch.State == StateCircuitOpen || ch.State == StateDisabled {
-			ch.mu.RUnlock()
-			continue
-		}
+		currTierMatch := ch.CustomerTierAllowed == userTier
+		currPriority := ch.Priority
+		currHealth := ch.HealthScore
 
-		// 3. Select by Priority and Health
-		// We prioritize channels that match the user tier exactly if it's not "all"
 		if best == nil {
 			best = ch
+			bestPriority = currPriority
+			bestHealth = currHealth
+			bestTierMatch = currTierMatch
 		} else {
 			// Tier Match Priority (Flagship should use Flagship channels first)
-			bestTierMatch := best.CustomerTierAllowed == userTier
-			currTierMatch := ch.CustomerTierAllowed == userTier
-
 			if currTierMatch && !bestTierMatch {
 				best = ch
+				bestPriority = currPriority
+				bestHealth = currHealth
+				bestTierMatch = currTierMatch
 			} else if currTierMatch == bestTierMatch {
-				if ch.Priority < best.Priority {
+				if currPriority < bestPriority {
 					best = ch
-				} else if ch.Priority == best.Priority && ch.HealthScore > best.HealthScore {
+					bestPriority = currPriority
+					bestHealth = currHealth
+					bestTierMatch = currTierMatch
+				} else if currPriority == bestPriority && currHealth > bestHealth {
 					best = ch
+					bestPriority = currPriority
+					bestHealth = currHealth
+					bestTierMatch = currTierMatch
 				}
 			}
 		}
