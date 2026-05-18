@@ -88,7 +88,7 @@ func (s *WalletService) DeductBalance(ctx context.Context, userID int, amount fl
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// 1. Lock and Get current balance
 	var walletID int

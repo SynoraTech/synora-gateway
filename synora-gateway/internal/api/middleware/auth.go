@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -77,7 +78,7 @@ func AuthMiddleware(riskEngine *risk.RiskEngine) gin.HandlerFunc {
 		if riskEngine != nil {
 			metrics, err := riskEngine.GetMetrics(ctx, userID)
 			if err != nil {
-				// Log error but continue for MVP
+				log.Printf("Risk Error: failed to get metrics for user %d: %v", userID, err)
 			}
 			if triggered, msg := riskEngine.EvaluateRules(ctx, userID, metrics); triggered {
 				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Risk control triggered: " + msg})

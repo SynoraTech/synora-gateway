@@ -18,7 +18,9 @@ rules:
     action: pause_key
 `
 	rulesPath := "test_rules.yaml"
-	os.WriteFile(rulesPath, []byte(rulesContent), 0644)
+	if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
+		t.Fatalf("Failed to write test rules: %v", err)
+	}
 	defer os.Remove(rulesPath)
 
 	keywords := []string{"forbidden", "illegal"}
@@ -58,7 +60,9 @@ rules:
     threshold: 10
 `
 	rulesPath := "test_rules_eval.yaml"
-	os.WriteFile(rulesPath, []byte(rulesContent), 0644)
+	if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
+		t.Fatalf("Failed to write test rules: %v", err)
+	}
 	defer os.Remove(rulesPath)
 
 	engine, err := NewRiskEngine(rulesPath, nil)

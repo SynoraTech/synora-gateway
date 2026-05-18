@@ -72,7 +72,7 @@ func (h *StripeHandler) Webhook(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Transaction failed"})
 			return
 		}
-		defer tx.Rollback(c.Request.Context())
+		defer func() { _ = tx.Rollback(c.Request.Context()) }()
 
 		_, err = tx.Exec(c.Request.Context(), "UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2", amountCNY, walletID)
 		if err != nil {

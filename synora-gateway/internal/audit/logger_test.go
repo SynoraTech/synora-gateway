@@ -11,7 +11,7 @@ func TestNewLogDispatcher(t *testing.T) {
 	
 	d := NewLogDispatcher(10)
 	if d == nil {
-		t.Errorf("NewLogDispatcher returned nil")
+		t.Fatalf("NewLogDispatcher returned nil")
 	}
 	if d.logChan == nil {
 		t.Errorf("logChan is nil")

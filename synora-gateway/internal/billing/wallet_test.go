@@ -12,14 +12,14 @@ import (
 func TestWalletService_RedisCache(t *testing.T) {
 	mr, _ := miniredis.Run()
 	defer mr.Close()
-	redis.InitRedis("redis://" + mr.Addr() + "/0")
+	_, _ = redis.InitRedis("redis://" + mr.Addr() + "/0")
 
 	svc := NewWalletService()
 	userID := 123
 	expectedBalance := 100.50
 
 	// Set value in Redis
-	mr.Set(fmt.Sprintf("wallet:balance:%d", userID), "100.50")
+	_ = mr.Set(fmt.Sprintf("wallet:balance:%d", userID), "100.50")
 
 	balance, err := svc.CheckBalance(context.Background(), userID)
 	if err != nil {

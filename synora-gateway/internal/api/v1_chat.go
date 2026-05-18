@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -62,8 +63,12 @@ func (h *ChatHandler) deductAndRecord(ctx context.Context, userID int, requestID
 		}
 
 		if h.risk != nil {
-			h.risk.RecordMetric(ctx, userID, "daily_spend_cny", cost*7.2*1.5)
-			h.risk.RecordMetric(ctx, userID, "spend_per_minute", cost*7.2*1.5)
+			if err := h.risk.RecordMetric(ctx, userID, "daily_spend_cny", cost*7.2*1.5); err != nil {
+				log.Printf("Risk Error: failed to record daily_spend_cny for user %d: %v", userID, err)
+			}
+			if err := h.risk.RecordMetric(ctx, userID, "spend_per_minute", cost*7.2*1.5); err != nil {
+				log.Printf("Risk Error: failed to record spend_per_minute for user %d: %v", userID, err)
+			}
 		}
 	}
 }

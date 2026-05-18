@@ -20,7 +20,7 @@ func TestDispatcher_Do_Failover(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"choices": [{"message": {"content": "Success"}}]}`))
+		_, _ = w.Write([]byte(`{"choices": [{"message": {"content": "Success"}}]}`))
 	}))
 	defer server.Close()
 

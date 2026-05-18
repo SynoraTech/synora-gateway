@@ -33,7 +33,9 @@ func TestStatusHandler_GetStatus(t *testing.T) {
 	}
 	
 	var resp map[string]interface{}
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("Failed to unmarshal response: %v", err)
+	}
 	
 	if resp["status"] != "unknown" { // because models are empty
 		t.Errorf("Expected status unknown, got %s", resp["status"])

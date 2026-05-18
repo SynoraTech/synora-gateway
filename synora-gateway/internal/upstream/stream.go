@@ -54,7 +54,9 @@ func (f *StreamForwarder) Forward(c *gin.Context, resp *http.Response, adp adapt
 		}
 
 		totalBytes += len(converted)
-		w.Write(converted)
+		if _, err := w.Write(converted); err != nil {
+			return false
+		}
 
 		// Parse the converted output (which is in OpenAI SSE format) to extract generated text
 		if bytes.HasPrefix(converted, []byte("data: ")) && !bytes.HasPrefix(converted, []byte("data: [DONE]")) {
@@ -98,6 +100,6 @@ func (f *StreamForwarder) ProxyResponse(c *gin.Context, resp *http.Response) []b
 	c.Status(resp.StatusCode)
 	
 	bodyBytes, _ := io.ReadAll(resp.Body)
-	c.Writer.Write(bodyBytes)
+	_, _ = c.Writer.Write(bodyBytes)
 	return bodyBytes
 }
