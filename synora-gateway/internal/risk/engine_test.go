@@ -17,7 +17,7 @@ rules:
     threshold: 100
     action: pause_key
 `
-	rulesPath := "test_rules.yaml"
+	rulesPath := "test_rules_mod.yaml"
 	if err := os.WriteFile(rulesPath, []byte(rulesContent), 0644); err != nil {
 		t.Fatalf("Failed to write test rules: %v", err)
 	}

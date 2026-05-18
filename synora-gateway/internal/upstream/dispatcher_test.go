@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/synora/synora-gateway/internal/adapter"
@@ -12,10 +13,10 @@ import (
 
 func TestDispatcher_Do_Failover(t *testing.T) {
 	// 1. Setup mock server that fails first then succeeds
-	callCount := 0
+	var callCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callCount++
-		if callCount == 1 {
+		newCount := atomic.AddInt32(&callCount, 1)
+		if newCount == 1 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -45,8 +46,8 @@ func TestDispatcher_Do_Failover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected success after failover, got error: %v", err)
 	}
-	if callCount != 2 {
-		t.Errorf("Expected 2 calls, got %d", callCount)
+	if atomic.LoadInt32(&callCount) != 2 {
+		t.Errorf("Expected 2 calls, got %d", atomic.LoadInt32(&callCount))
 	}
 	if ch.ID != 2 {
 		t.Errorf("Expected failover to channel 2, got %d", ch.ID)

@@ -10,11 +10,14 @@ import (
 
 // Tokenizer handles token counting for different models
 type Tokenizer struct {
-	mu sync.Mutex
+	mu        sync.Mutex
+	encodings map[string]*tiktoken.Tiktoken
 }
 
 func NewTokenizer() *Tokenizer {
-	return &Tokenizer{}
+	return &Tokenizer{
+		encodings: make(map[string]*tiktoken.Tiktoken),
+	}
 }
 
 // CountTokens estimates the number of tokens in a string for a given model
@@ -29,11 +32,24 @@ func (t *Tokenizer) CountTokens(text string, model string) (int, error) {
 	}
 
 	t.mu.Lock()
-	tke, err := tiktoken.GetEncoding(encoding)
+	tke, ok := t.encodings[encoding]
+	if !ok {
+		var err error
+		tke, err = tiktoken.GetEncoding(encoding)
+		if err == nil {
+			t.encodings[encoding] = tke
+		}
+	}
 	t.mu.Unlock()
 	
-	if err != nil {
-		return 0, fmt.Errorf("failed to get encoding: %v", err)
+	if tke == nil {
+		// If tke is still nil, it means GetEncoding failed
+		// Re-fetch without cache to get the actual error if it failed
+		var err error
+		tke, err = tiktoken.GetEncoding(encoding)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get encoding: %v", err)
+		}
 	}
 
 	token := tke.Encode(text, nil, nil)
