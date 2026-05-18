@@ -59,3 +59,13 @@ jobs:
         tags: |
           larrychen0125/synora:latest
           larrychen0125/synora:${{ github.sha }}
+
+
+    - name: Update Docker Hub description
+      if: github.event_name != 'pull_request'
+      uses: peter-evans/dockerhub-description@v4
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        repository: larrychen0125/synora
+        readme-filepath: ./README.md
