@@ -91,7 +91,7 @@ func (d *Dispatcher) Do(ctx context.Context, rc *RequestContext, hm *router.Heal
 		resp, latency, err := d.executeRequest(ctx, rc.UnifiedRequest, ch, adp)
 		
 		// 4. Update health based on outcome
-		isSuccess := err == nil && resp.StatusCode < 500 && resp.StatusCode != 429
+		isSuccess := err == nil && resp != nil && resp.StatusCode < 500 && resp.StatusCode != 429
 		hm.UpdateScore(ch.ID, isSuccess, latency)
 
 		if isSuccess {

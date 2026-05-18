@@ -56,6 +56,40 @@ func TestDispatcher_Do_Failover(t *testing.T) {
 	}
 }
 
+func TestDispatcher_Do_NetworkError(t *testing.T) {
+	// Simulate a network error (connection refused)
+	d := NewDispatcher()
+	hm := router.NewHealthManager()
+	
+	ch := &router.Channel{
+		ID: 1, 
+		Provider: "openai", 
+		Endpoint: "http://localhost:12345", // Unlikely to be listening
+		Priority: 1, 
+		HealthScore: 100, 
+		State: router.StateActive, 
+		CustomerTierAllowed: "all",
+	}
+	hm.AddChannel(ch)
+
+	rc := &RequestContext{
+		UnifiedRequest: &adapter.UnifiedRequest{Model: "gpt-3.5-turbo"},
+		Channels:       []*router.Channel{ch},
+		UserTier:       "standard",
+		MaxRetries:     0,
+	}
+
+	_, _, _, err := d.Do(context.Background(), rc, hm)
+	if err == nil {
+		t.Error("Expected network error, got nil")
+	}
+	
+	// Verify that health was updated to false
+	if ch.HealthScore >= 100 {
+		t.Errorf("Expected health score to drop, got %d", ch.HealthScore)
+	}
+}
+
 func TestShouldFailover(t *testing.T) {
 	tests := []struct {
 		statusCode int
